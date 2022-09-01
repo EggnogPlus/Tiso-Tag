@@ -15,6 +15,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     public float sprintSpeed;
     public float slideSpeed; //if u change slide speed keep and eye on overtimeslidespeed as that is hardcoded
     public float overtimeslideSpeed;
+    public float wallrunSpeed;
 
     private float desiredMoveSpeed;
     private float lastDesiredMoveSpeed;
@@ -28,7 +29,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     public float jumpForce;
     public float jumpCooldown;
     public float airMultiplier;
-    bool readyToJump;
+    public bool readyToJump;
 
     [Header("Crouching")]
     public float crouchSpeed;
@@ -65,12 +66,15 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     {
         walking,
         sprinting,
+        wallrunning,
         crouching,
         sliding,
         air
     }
 
     public bool sliding;
+    //public bool crouching; //worked without it, might break it
+    public bool wallrunning;
 
     private void Start()
     {
@@ -185,6 +189,14 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
             desiredMoveSpeed = sprintSpeed;
         }
 
+        // Mode - Wallrunning
+        else if (wallrunning)
+        {
+            state = MovementState.wallrunning;
+            desiredMoveSpeed = wallrunSpeed;
+
+        }
+
         // Mode - Walking
         else if (grounded)
         {
@@ -265,7 +277,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
             rb.AddForce(moveDirection.normalized * moveSpeed * 10f * airMultiplier, ForceMode.Force);
 
         // turn gravity off while on slope
-        //rb.useGravity = !OnSlope();
+        //if(!wallrunning) rb.useGravity = !OnSlope(); // MIGHT NEED THIS BUT KINDA BROKEN ##########################
     }
     
     private void SpeedControl()
@@ -309,7 +321,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         }
     }
 
-    private void Jump()
+    public void Jump()
     {
         exitingSlope = true;
 
@@ -318,7 +330,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
         rb.AddForce(transform.up * jumpForce, ForceMode.Impulse);
     }
-    private void ResetJump()
+    public void ResetJump()
     {
         readyToJump = true;
 
