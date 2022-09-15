@@ -12,20 +12,24 @@ public class SwingGrapple : MonoBehaviour
     private SpringJoint joint;
 
 
+
+    public GameObject swingGun;
+
     private void Awake()
     {
-        lr = GetComponent<LineRenderer>();
+        lr = GetComponentInChildren<LineRenderer>();
+ 
     }
 
     private void Update()
     {
-        
-
         if (Input.GetMouseButtonDown(0))
         {
+            //swingGun.SetActive(true);
             StartGrapple();
         }
         else if(Input.GetMouseButtonUp(0)){
+            //swingGun.SetActive(false);
             StopGrapple();
         }
     }
@@ -39,7 +43,7 @@ public class SwingGrapple : MonoBehaviour
     void StartGrapple()
     {
         RaycastHit hit;
-        if(Physics.Raycast(camera.position, camera.forward, out hit, maxDistance, whatIsGrappable))
+        if (Physics.Raycast(camera.position, camera.forward, out hit, maxDistance, whatIsGrappable))
         {
             grapplePoint = hit.point;
             joint = player.gameObject.AddComponent<SpringJoint>();

@@ -36,10 +36,12 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     public float crouchYScale;
     private float startYScale;
 
-    [Header("Keybinds")]
+    [Header("Keybinds + Mouse")]
     public KeyCode jumpKey = KeyCode.Space;
     public KeyCode sprintKey = KeyCode.LeftShift;
     public KeyCode crouchKey = KeyCode.LeftControl;
+    
+    public Transform cameraTransform;
 
     [Header("Ground Check")]
     public float playerHeight;
@@ -61,9 +63,15 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     Rigidbody rb;
 
+    [SerializeField] private Material taggedColor;
+    [SerializeField] private Material initialColor; // maybe serialize?
+
+    public bool readyToSlide = true;
+
     public MovementState state;
     public enum MovementState
     {
+        freeze, //maybe don't use
         walking,
         sprinting,
         wallrunning,
@@ -72,9 +80,20 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         air
     }
 
+    private bool isTagged;
+
+    public bool freeze;
+
+    public bool activeHook;
+
     public bool sliding;
     //public bool crouching; //worked without it, might break it
     public bool wallrunning;
+
+    private void Awake()
+    {
+        //initialColor = GetComponentInChildren<MeshRenderer>().material; // if serialize initial color - no need for this
+    }
 
     private void Start()
     {
@@ -82,10 +101,15 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
         //myPlayer.GetComponentInChildren<Camera>().enabled = true;
 
+        //cc = GetComponent<CharacterController>(); using character controller
+        cameraTransform = GetComponentInChildren<Camera>().transform;
+
         if (!photonView.IsMine)
         {
             GetComponentInChildren<PlayerCam>().enabled = false;
             GetComponentInChildren<Camera>().enabled = false;
+            //GetComponentInChildren<AudioListener>().enabled = false;
+
             //GetComponentInChildren<FirstPersonController>().enabled = false;
             //GetComponentInChildren<Sliding>().enabled = false;
             //GetComponentInChildren<AudioListener>().enabled = false;
@@ -102,6 +126,8 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     private void Update()
     {
+       
+
         if (photonView.IsMine)
         {
             // ground check
@@ -112,11 +138,12 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
             StateHandler();
 
             // handle drag
-            if (grounded)
+            if (grounded & !activeHook)
                 rb.drag = groundDrag;
             else
                 rb.drag = 0;
         }
+
     }
 
     private void FixedUpdate()
@@ -125,7 +152,29 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         {
             MovePlayer();
         }
+
            
+    }
+
+    [SerializeField] private GameObject PlayerR;
+
+    [PunRPC]
+    public void OnTagged()
+    {
+        // flag player as tagged 
+        isTagged = true;
+        // change color of player
+        //GetComponentInChildren<MeshRenderer>().material.color = taggedColor;
+        PlayerR.GetComponent<MeshRenderer>().material = taggedColor;
+    }
+    [PunRPC]
+    public void OnUntagged()
+    {
+        // flag player as untagged 
+        isTagged = false;
+        // reset color of player
+        //GetComponentInChildren<MeshRenderer>().material.color = initialColor;
+        PlayerR.GetComponent<MeshRenderer>().material = initialColor;
     }
 
     private void MyInput()
@@ -133,8 +182,10 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         horizontalInput = Input.GetAxisRaw("Horizontal");
         verticalInput = Input.GetAxisRaw("Vertical");
 
+        transform.Rotate(0, horizontalInput, 0); //############################## might break it, attempt to update online orientation
+
         // when to jump
-        if(Input.GetKey(jumpKey) && readyToJump && grounded)
+        if (Input.GetKey(jumpKey) && readyToJump && grounded)
         {
             readyToJump = false;
 
@@ -144,9 +195,11 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         }
 
         // start crouch
-        if (Input.GetKeyDown(crouchKey))
+        if (Input.GetKeyDown(crouchKey) && readyToSlide == true)
         {
-            transform.localScale = new Vector3(transform.localScale.x, crouchYScale, transform.localScale.z);
+
+            //transform.localScale = new Vector3(transform.localScale.x, crouchYScale, transform.localScale.z);
+            
             rb.AddForce(Vector3.down * 5f, ForceMode.Impulse);
         }
 
@@ -160,8 +213,17 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     private void StateHandler()
     {
         overtimeslideSpeed = 20f; //hardcoded for slideSpeed = 99
+
+        // Mode - Freeze
+        if (freeze)
+        {
+            state = MovementState.freeze;
+            moveSpeed = 0;
+            rb.velocity = Vector3.zero;
+        }
+
         // Mode - Sliding
-        if (sliding)
+        else if (sliding)
         {
             state = MovementState.sliding;
 
@@ -170,14 +232,14 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
             else
                 desiredMoveSpeed = overtimeslideSpeed;
-            
-                
-                
+
+
         }
 
         // Mode - Crouching
         else if (Input.GetKey(crouchKey))
         {
+
             state = MovementState.crouching;
             desiredMoveSpeed = crouchSpeed;
         }
@@ -256,6 +318,11 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     private void MovePlayer()
     {
+        if (activeHook)
+        {
+            return;
+        }
+
         // calculate movement direction
         moveDirection = orientation.forward * verticalInput + orientation.right * horizontalInput;
 
@@ -282,6 +349,11 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     
     private void SpeedControl()
     {
+        if (activeHook)
+        {
+            return;
+        }
+
         // limiting speed on slope
         if (OnSlope() && !exitingSlope)
         {
@@ -337,6 +409,41 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         exitingSlope = false;
     }
 
+    private bool enableMovementOnNextTouch;
+
+    public void JumpToPosition(Vector3 targetposition, float trajectoryHeight)
+    {
+        activeHook = true;
+
+        velocityToSet = CalculateJumpVelocity(transform.position, targetposition, trajectoryHeight);
+        Invoke(nameof(SetVelocity), 0.1f);
+
+        Invoke(nameof(ResetRestrictions), 3f);
+
+    }
+
+    private Vector3 velocityToSet;
+    private void SetVelocity()
+    {
+        enableMovementOnNextTouch = true;
+        rb.velocity = velocityToSet;
+    }
+
+    public void ResetRestrictions()
+    {
+        activeHook = false;
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (enableMovementOnNextTouch)
+        {
+            enableMovementOnNextTouch = false;
+            ResetRestrictions();
+
+            GetComponent<HookGrapple>().StopGrapple();
+        }
+    }
     public bool OnSlope()
     {
         if(Physics.Raycast(transform.position, Vector3.down, out slopeHit, playerHeight * 0.5f + 0.3f))
@@ -351,5 +458,18 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     public Vector3 GetSlopeMoveDirection(Vector3 direction)
     {
         return Vector3.ProjectOnPlane(direction, slopeHit.normal).normalized;
+    }
+
+    public Vector3 CalculateJumpVelocity(Vector3 startPoint, Vector3 endPoint, float trajectoryHeight)
+    {
+        float gravity = Physics.gravity.y;
+        float displacementY = endPoint.y - startPoint.y;
+        Vector3 displacementXZ = new Vector3(endPoint.x - startPoint.x, 0f, endPoint.z - startPoint.z);
+
+        Vector3 velocityY = Vector3.up * Mathf.Sqrt(-2 * gravity * trajectoryHeight);
+        //Vector3 velocityXZ = displacementXZ / (Mathf.Sqrt(-2 * trajectoryHeight / gravity) + Mathf.Sqrt(2 * (displacementY - trajectoryHeight) / gravity));
+        Vector3 velocityXZ = displacementXZ / 2;
+
+        return velocityXZ + velocityY;
     }
 }
