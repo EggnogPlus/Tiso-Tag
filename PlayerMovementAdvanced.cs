@@ -61,12 +61,19 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     public Vector3 moveDirection;
 
-    Rigidbody rb;
-
-    [SerializeField] private Material taggedColor;
-    [SerializeField] private Material initialColor; // maybe serialize?
-
     public bool readyToSlide = true;
+
+    Rigidbody rb;
+    [Header("Tagging")]
+    [SerializeField] private Material taggedColor;
+    private Material initialColor; // maybe serialize?
+    private float tagBackTimer; //tag back values
+    [SerializeField] private float tagBackDuration;
+    [SerializeField] private float tagRange;
+
+    [Header("Random")]
+
+
 
     public MovementState state;
     public enum MovementState
@@ -80,7 +87,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         air
     }
 
-    private bool isTagged;
+    public bool isTagged;
 
     public bool freeze;
 
@@ -92,7 +99,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     private void Awake()
     {
-        //initialColor = GetComponentInChildren<MeshRenderer>().material; // if serialize initial color - no need for this
+        initialColor = GetComponentInChildren<MeshRenderer>().material; // if serialize initial color - no need for this
     }
 
     private void Start()
@@ -142,8 +149,35 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
                 rb.drag = groundDrag;
             else
                 rb.drag = 0;
+
+
+            if (tagBackTimer > 0f)
+            {
+                tagBackTimer -= Time.deltaTime;
+            }
+
+            if (Input.GetMouseButtonDown(1))
+            {
+                RaycastHit hit;
+                //var ray = Camera.main.ScreenPointToRay(Input.mousePosition); //sends a ray out from center of screen
+                var ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+
+                if (Physics.Raycast(ray, out hit, tagRange))
+                {
+                    if (hit.collider.tag == "Player")
+                    {
+                        // untag self
+                        GetComponent<PlayerMovementAdvanced>().photonView.RPC("onUntagged", RpcTarget.AllBuffered);
+
+                        // tag who raycast hits
+
+                    }
+                }
+            }
+
         }
 
+        
     }
 
     private void FixedUpdate()
@@ -159,22 +193,52 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject PlayerR;
 
     [PunRPC]
-    public void OnTagged()
+    public void onTagged()
     {
         // flag player as tagged 
         isTagged = true;
+
+        // start tagback timer
+        tagBackTimer = tagBackDuration;
+
         // change color of player
         //GetComponentInChildren<MeshRenderer>().material.color = taggedColor;
         PlayerR.GetComponent<MeshRenderer>().material = taggedColor;
+        Debug.Log("onTagged() ran");
     }
+
     [PunRPC]
-    public void OnUntagged()
+    public void onUntagged()
     {
-        // flag player as untagged 
+        // flag player as untagged
         isTagged = false;
         // reset color of player
         //GetComponentInChildren<MeshRenderer>().material.color = initialColor;
         PlayerR.GetComponent<MeshRenderer>().material = initialColor;
+        Debug.Log("onUntagged() ran");
+    }
+
+   
+    private void onCollisionEnter(Collision other)
+    {
+        Debug.Log("onCollissionEnter runs");
+
+        // check for player collision
+        var otherPlayer = other.collider.GetComponent<PlayerMovementAdvanced>();
+
+        if (otherPlayer != null)
+        {
+            // if we're tagged and tagback is on
+            if (isTagged && tagBackTimer <= 0f)
+            {
+                // untag user
+                photonView.RPC("onUntagged", RpcTarget.AllBuffered);
+
+                // tag other
+                otherPlayer.photonView.RPC("onTagged", RpcTarget.AllBuffered);
+
+            }
+        }
     }
 
     private void MyInput()
@@ -212,7 +276,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     private void StateHandler()
     {
-        overtimeslideSpeed = 20f; //hardcoded for slideSpeed = 99
+        overtimeslideSpeed = 22; //hardcoded for slideSpeed = 99
 
         // Mode - Freeze
         if (freeze)

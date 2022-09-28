@@ -26,7 +26,7 @@ public class HookGrapple : MonoBehaviour
     private float grapplingCdTimer;
 
     [Header("Input")]
-    public KeyCode grapplingKey = KeyCode.Mouse1;
+    [SerializeField]public KeyCode grapplingKey;
 
     private bool grappling;
 
