@@ -2,9 +2,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using System.Linq;
 using Photon.Pun;
 
-public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
+public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
 {
     //[Header("Player")]
     //public GameObject playerPrefab;
@@ -72,6 +73,11 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
     [SerializeField] private float tagRange;
 
     [Header("Random")]
+    [SerializeField] private TMP_Text nameText;
+    [SerializeField] private float timeSpentTagged;
+    [SerializeField] private TMP_Text speedDisplay;
+    [SerializeField] private TMP_Text tagDisplay;
+
 
 
 
@@ -104,6 +110,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     private void Start()
     {
+
         //GameObject myPlayer = (GameObject)PhotonNetwork.Instantiate(this.playerPrefab.name, new Vector3(0f, 5f, 0f), Quaternion.identity, 0);
 
         //myPlayer.GetComponentInChildren<Camera>().enabled = true;
@@ -115,12 +122,14 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         {
             GetComponentInChildren<PlayerCam>().enabled = false;
             GetComponentInChildren<Camera>().enabled = false;
-            //GetComponentInChildren<AudioListener>().enabled = false;
+            GetComponentInChildren<AudioListener>().enabled = false;
 
             //GetComponentInChildren<FirstPersonController>().enabled = false;
             //GetComponentInChildren<Sliding>().enabled = false;
             //GetComponentInChildren<AudioListener>().enabled = false;
         }
+
+        UpdateNameDisplay();
   
 
                 rb = GetComponent<Rigidbody>();
@@ -133,7 +142,6 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
     private void Update()
     {
-       
 
         if (photonView.IsMine)
         {
@@ -164,17 +172,65 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
 
                 if (Physics.Raycast(ray, out hit, tagRange))
                 {
-                    if (hit.collider.tag == "Player")
+                    if (hit.collider.tag == "Player" && isTagged && tagBackTimer <= 0f) // Hits player, while tagged, and tag back timer = 0
                     {
+                        //child.GetComponent<blockCollide>().BroadcastMessage("updateLocalState", true);
+
                         // untag self
                         GetComponent<PlayerMovementAdvanced>().photonView.RPC("onUntagged", RpcTarget.AllBuffered);
 
                         // tag who raycast hits
-
+                        //GetComponent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
+                        //GameObject.Find("Overlap").tag = "tag";
+                        //hit.transform.gameObject.GetComponentInChildren<MeshRenderer>().material.color = Color.red;
+                        hit.transform.gameObject.GetComponent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
                     }
                 }
             }
 
+            if (PlayerR.GetComponent<MeshRenderer>().material.color == Color.red && isTagged == false)
+            {
+                Debug.Log("color red tag runs");
+                GetComponent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
+                PlayerR.GetComponentInParent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Semicolon) && isTagged == false) // Emergency tag self - only use when no-one in game is tagged
+            {
+                Debug.Log("Tagger reset");
+                GetComponent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
+                PlayerR.GetComponentInParent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
+            }
+
+            // if tagged, increase time tracked as tagged
+            if (isTagged)
+            {
+                timeSpentTagged += Time.deltaTime;
+                UpdateNameDisplay(); // updates it every time
+            }
+            else
+            {
+                UpdateNameDisplay();
+            }
+
+            // ### Onscreen Speed Display
+
+            //var kph = (moveDirection * Time.deltaTime).magnitude * 3.6;
+            var kph = GetComponent<Rigidbody>().velocity.magnitude; //  * 3.6 - for kph
+
+            speedDisplay.text = ($"{kph.ToString("F1")} ms");
+
+            if(tagBackTimer > 0)
+            {
+                var tagTimeDisplay = tagBackTimer;
+
+                tagDisplay.text = tagTimeDisplay.ToString("F1");
+            }
+            else
+            {
+                tagDisplay.text = "";
+            }
+            
         }
 
         
@@ -185,9 +241,26 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         if (photonView.IsMine)
         {
             MovePlayer();
+
+            
         }
 
            
+    }
+
+    private void UpdateNameDisplay()
+    {
+        // if our player is winning
+        var isWinning = FindObjectsOfType<PlayerMovementAdvanced>().OrderBy(p => p.timeSpentTagged).First() == this; // Orders player and grabs top one, if player is top then you're winning
+
+        if (isWinning)
+        {
+            nameText.text = $"<color=green>{photonView.Owner.NickName}</color>\n<size=50%>{timeSpentTagged:F1}</size>"; // Green color for winning
+        }
+        else
+        {
+            nameText.text = $"{photonView.Owner.NickName}\n<size=50%>{timeSpentTagged:F1}</size>";
+        }
     }
 
     [SerializeField] private GameObject PlayerR;
@@ -202,8 +275,8 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         tagBackTimer = tagBackDuration;
 
         // change color of player
-        //GetComponentInChildren<MeshRenderer>().material.color = taggedColor;
-        PlayerR.GetComponent<MeshRenderer>().material = taggedColor;
+        //GetComponentInChildren<MeshRenderer>().material.color = taggedColor; // got rid of taggedColor & initialColor as material/color issues
+        PlayerR.GetComponent<MeshRenderer>().material.color = Color.red;
         Debug.Log("onTagged() ran");
     }
 
@@ -214,33 +287,49 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         isTagged = false;
         // reset color of player
         //GetComponentInChildren<MeshRenderer>().material.color = initialColor;
-        PlayerR.GetComponent<MeshRenderer>().material = initialColor;
+        PlayerR.GetComponent<MeshRenderer>().material.color = Color.white;
         Debug.Log("onUntagged() ran");
     }
 
-   
-    private void onCollisionEnter(Collision other)
+    /*
+    private void namen(Collision other, Collision collision)
     {
-        Debug.Log("onCollissionEnter runs");
+        var otherNamen = other.collider.gameObject;
+        if (isTagged && collision.gameObject.CompareTag("Player"))
+        {
+            photonView.RPC("onUntagged", RpcTarget.AllBuffered);
+
+            // tag other
+            otherNamen.photonView.RPC("onTagged", RpcTarget.AllBuffered);
+        }
+    }
+   
+    */
+    /* ### Attempt to collide and activate tagging but caused too many issues so just manual tagging
+    private void OnCollisionEnter(Collision other)
+    {
+        Debug.Log("onCollissionEnter runs"); // ### doesnt run
 
         // check for player collision
         var otherPlayer = other.collider.GetComponent<PlayerMovementAdvanced>();
+        Debug.Log(otherPlayer);
 
         if (otherPlayer != null)
         {
+            Debug.Log("otherPlayer != null");
             // if we're tagged and tagback is on
             if (isTagged && tagBackTimer <= 0f)
             {
                 // untag user
-                photonView.RPC("onUntagged", RpcTarget.AllBuffered);
+                //photonView.RPC("onUntagged", RpcTarget.AllBuffered);
 
                 // tag other
-                otherPlayer.photonView.RPC("onTagged", RpcTarget.AllBuffered);
+                //otherPlayer.photonView.RPC("onTagged", RpcTarget.AllBuffered);
 
             }
         }
     }
-
+    */
     private void MyInput()
     {
         horizontalInput = Input.GetAxisRaw("Horizontal");
@@ -263,7 +352,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         {
 
             //transform.localScale = new Vector3(transform.localScale.x, crouchYScale, transform.localScale.z);
-            
+            //change opacity here?
             rb.AddForce(Vector3.down * 5f, ForceMode.Impulse);
         }
 
@@ -498,7 +587,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         activeHook = false;
     }
 
-    private void OnCollisionEnter(Collision collision)
+    private void onCollisionEnter(Collision collision)
     {
         if (enableMovementOnNextTouch)
         {
@@ -508,6 +597,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
             GetComponent<HookGrapple>().StopGrapple();
         }
     }
+
     public bool OnSlope()
     {
         if(Physics.Raycast(transform.position, Vector3.down, out slopeHit, playerHeight * 0.5f + 0.3f))
@@ -535,5 +625,22 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks
         Vector3 velocityXZ = displacementXZ / 2;
 
         return velocityXZ + velocityY;
+    }
+
+    // photon update time tagged
+    public void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
+    {
+        if (stream.IsWriting)
+        {
+            stream.SendNext(isTagged);
+            stream.SendNext(timeSpentTagged);
+        }
+        else
+        {
+            isTagged = (bool) stream.ReceiveNext();
+            timeSpentTagged = (float) stream.ReceiveNext();
+
+            UpdateNameDisplay();
+        }
     }
 }

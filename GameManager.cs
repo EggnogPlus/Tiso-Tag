@@ -6,7 +6,7 @@ using Photon.Pun;
 public class GameManager : MonoBehaviourPunCallbacks
 {
 
-
+    private PlayerMovementAdvanced pm;
     public GameObject playerPrefab;
     public Transform spawnPoint;
 
@@ -21,6 +21,10 @@ public class GameManager : MonoBehaviourPunCallbacks
             // Start as tagged
             newPlayer.GetComponent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered); // need all buffered as to accomodate for new players
         }
+
+        
+        
+        
     }
 
     // Update is called once per frame

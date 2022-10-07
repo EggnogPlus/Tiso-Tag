@@ -39,7 +39,6 @@ public class SwingGrapple : MonoBehaviour
     {
         DrawRope();
     }
-
     void StartGrapple()
     {
         RaycastHit hit;
@@ -63,6 +62,8 @@ public class SwingGrapple : MonoBehaviour
             joint.massScale = 4.5f;
 
             lr.positionCount = 2;
+
+            
         }
     }
 
