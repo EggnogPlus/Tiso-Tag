@@ -4,6 +4,8 @@ using UnityEngine;
 using TMPro;
 using System.Linq;
 using Photon.Pun;
+using UnityEngine.UI;
+using UnityEngine.Events;
 
 public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
 {
@@ -71,12 +73,25 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
     private float tagBackTimer; //tag back values
     [SerializeField] private float tagBackDuration;
     [SerializeField] private float tagRange;
+    public AudioSource source;
+    public AudioClip taggedSound;
+    
+
+    [Header("Radial Indicator")]
+    [SerializeField] private float indicatorTimer = 100% 10;
+    [SerializeField] private float maxIndicatorTimer = 100% 10;
+    [SerializeField] public Image radialIndicatorUI = null;
+    [SerializeField] private UnityEvent myEvent = null;
+    private bool shouldUpdate = false;
+    public float cooldownPercentage;
+
 
     [Header("Random")]
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private float timeSpentTagged;
     [SerializeField] private TMP_Text speedDisplay;
     [SerializeField] private TMP_Text tagDisplay;
+
 
 
 
@@ -116,6 +131,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
         //myPlayer.GetComponentInChildren<Camera>().enabled = true;
 
         //cc = GetComponent<CharacterController>(); using character controller
+
         cameraTransform = GetComponentInChildren<Camera>().transform;
 
         if (!photonView.IsMine)
@@ -123,7 +139,9 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
             GetComponentInChildren<PlayerCam>().enabled = false;
             GetComponentInChildren<Camera>().enabled = false;
             GetComponentInChildren<AudioListener>().enabled = false;
+            GetComponent<PlayerMovementAdvanced>().radialIndicatorUI.enabled = false;
 
+            
             //GetComponentInChildren<FirstPersonController>().enabled = false;
             //GetComponentInChildren<Sliding>().enabled = false;
             //GetComponentInChildren<AudioListener>().enabled = false;
@@ -164,7 +182,7 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
                 tagBackTimer -= Time.deltaTime;
             }
 
-            if (Input.GetMouseButtonDown(1))
+            if (Input.GetMouseButtonDown(1) && LocalPauseMenu.GameIsPaused == false)
             {
                 RaycastHit hit;
                 //var ray = Camera.main.ScreenPointToRay(Input.mousePosition); //sends a ray out from center of screen
@@ -193,6 +211,9 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
                 Debug.Log("color red tag runs");
                 GetComponent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
                 PlayerR.GetComponentInParent<PlayerMovementAdvanced>().photonView.RPC("onTagged", RpcTarget.AllBuffered);
+
+                // music que yourself been tagged
+                
             }
 
             if (Input.GetKeyDown(KeyCode.Semicolon) && isTagged == false) // Emergency tag self - only use when no-one in game is tagged
@@ -230,12 +251,61 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
             {
                 tagDisplay.text = "";
             }
-            
-        }
 
-        
-    }
+            bool keepVisible = false;
+            // grapplingCdTimer is variable I need from Hookgrapple.cs & maxGrappleDistance for the indicator to appear
+            // yeet is like start of successful grapple so start point
+            if (GetComponent<HookGrapple>().yeet == true || keepVisible == true)
+            {
+                shouldUpdate = false;
+                keepVisible = true;
 
+                cooldownPercentage = indicatorTimer / 9;
+
+                indicatorTimer -= Time.deltaTime;
+                radialIndicatorUI.enabled = true;
+                radialIndicatorUI.fillAmount = cooldownPercentage;
+
+                if(indicatorTimer <= 0)
+                {
+                    indicatorTimer = maxIndicatorTimer;
+                    radialIndicatorUI.fillAmount = maxIndicatorTimer;
+                    radialIndicatorUI.enabled = false;
+                    keepVisible = false;
+                    GetComponent<HookGrapple>().yeet = false;
+                    myEvent.Invoke();
+                }
+            }
+            else
+            {
+                if (shouldUpdate)
+                {
+                    indicatorTimer += Time.deltaTime;
+                    radialIndicatorUI.fillAmount = indicatorTimer;
+
+                    if(indicatorTimer >= maxIndicatorTimer)
+                    {
+                        indicatorTimer = maxIndicatorTimer;
+                        radialIndicatorUI.fillAmount = maxIndicatorTimer;
+                        radialIndicatorUI.enabled = false;
+                        shouldUpdate = false;
+                        keepVisible = false;
+                        GetComponent<HookGrapple>().yeet = false;
+                    }
+                }
+            }
+
+            if(GetComponent<HookGrapple>().yeet == false)
+            {
+                shouldUpdate = true;
+                radialIndicatorUI.enabled = false;
+            }
+
+
+        }// end of photonview.ismine    
+    }// end of update
+
+    [PunRPC]
     private void FixedUpdate()
     {
         if (photonView.IsMine)
@@ -245,7 +315,6 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
             
         }
 
-           
     }
 
     private void UpdateNameDisplay()
@@ -277,6 +346,10 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
         // change color of player
         //GetComponentInChildren<MeshRenderer>().material.color = taggedColor; // got rid of taggedColor & initialColor as material/color issues
         PlayerR.GetComponent<MeshRenderer>().material.color = Color.red;
+
+        // audio cue to all players
+        taggedAudio();
+
         Debug.Log("onTagged() ran");
     }
 
@@ -289,6 +362,11 @@ public class PlayerMovementAdvanced : MonoBehaviourPunCallbacks, IPunObservable
         //GetComponentInChildren<MeshRenderer>().material.color = initialColor;
         PlayerR.GetComponent<MeshRenderer>().material.color = Color.white;
         Debug.Log("onUntagged() ran");
+    }
+
+    public void taggedAudio()
+    {
+        source.PlayOneShot(taggedSound);
     }
 
     /*

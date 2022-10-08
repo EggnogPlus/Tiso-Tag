@@ -49,6 +49,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void Play() // asign this to public match button (and change random) and asign a different thing for private 1v1 room when/if we ge to it
     {
+
         if (string.IsNullOrEmpty(nameInput.text))
         {
             SetStatus("Please enter a name");

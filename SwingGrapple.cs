@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Photon.Pun;
 
-public class SwingGrapple : MonoBehaviour
+public class SwingGrapple : MonoBehaviourPunCallbacks
 {
     private LineRenderer lr;
     private Vector3 grapplePoint;
@@ -10,7 +11,7 @@ public class SwingGrapple : MonoBehaviour
     public Transform gunTip, camera, player;
     private float maxDistance = 100f;
     private SpringJoint joint;
-
+    public bool amIGrappling;
 
 
     public GameObject swingGun;
@@ -21,24 +22,35 @@ public class SwingGrapple : MonoBehaviour
  
     }
 
+   // [PunRPC]
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0))
+        if (Input.GetMouseButtonDown(0) && LocalPauseMenu.GameIsPaused == false)
         {
             //swingGun.SetActive(true);
             StartGrapple();
+            //GetComponent<SwingGrapple>().photonView.RPC("StartGrapple", RpcTarget.AllBuffered); - if i need to send an rpc to display it online
         }
-        else if(Input.GetMouseButtonUp(0)){
+        else if(Input.GetMouseButtonUp(0) && LocalPauseMenu.GameIsPaused == false)
+        {
             //swingGun.SetActive(false);
             StopGrapple();
+            //GetComponent<SwingGrapple>().photonView.RPC("StopGrapple", RpcTarget.AllBuffered); - if i need to send an rpc to display it online
         }
+
+        //GetComponent<PlayerMovementAdvanced>().photonView.RPC("onUntagged", RpcTarget.AllBuffered); - RPC example
+
+
     }
 
     //called after update
     private void LateUpdate()
     {
+        /* if (photonView.IsMine && amIGrappling == true)
+            GetComponent<SwingGrapple>().photonView.RPC("DrawRope", RpcTarget.AllBuffered); */
         DrawRope();
     }
+
     void StartGrapple()
     {
         RaycastHit hit;
@@ -56,14 +68,15 @@ public class SwingGrapple : MonoBehaviour
             joint.maxDistance = distanceFromPoint * 0.8f;
             joint.minDistance = distanceFromPoint * 0.25f;
 
-            //change these pls omfg
+            //ajdust these to liking - current is ok but could be improved
             joint.spring = 4.5f;
             joint.damper = 7f;
             joint.massScale = 4.5f;
 
             lr.positionCount = 2;
 
-            
+            amIGrappling = true;
+
         }
     }
 
@@ -72,12 +85,14 @@ public class SwingGrapple : MonoBehaviour
         if (!joint) return;
         lr.SetPosition(index: 0, gunTip.position);
         lr.SetPosition(index: 1, grapplePoint);
+
     } 
 
     void StopGrapple()
     {
         lr.positionCount = 0;
         Destroy(joint);
+        amIGrappling=false;
     }
 
     public bool IsGrappling()

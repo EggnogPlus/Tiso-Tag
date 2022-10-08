@@ -18,11 +18,14 @@ public class HookGrapple : MonoBehaviour
     public float maxGrappleDistance;
     public float grappleDelayTime;
     public float overshootYAxis;
+    public bool yeet = false;
+    public AudioSource source;
+    public AudioClip hookSound;
 
     private Vector3 grapplePoint;
 
     [Header("Cooldown")]
-    public float grapplingCd;
+    [SerializeField] public float grapplingCd;
     private float grapplingCdTimer;
 
     [Header("Input")]
@@ -40,7 +43,7 @@ public class HookGrapple : MonoBehaviour
     private void Update()
     {
 
-        if (Input.GetKeyDown(grapplingKey))
+        if (Input.GetKeyDown(grapplingKey) && LocalPauseMenu.GameIsPaused == false)
         {
             HookGun.SetActive(true);
             StartGrapple();
@@ -48,6 +51,8 @@ public class HookGrapple : MonoBehaviour
 
         if(grapplingCdTimer > 0)
             grapplingCdTimer -= Time.deltaTime;
+
+
     }
 
     private void LateUpdate()
@@ -77,16 +82,24 @@ public class HookGrapple : MonoBehaviour
             grapplePoint = hit.point;
 
             Invoke(nameof(ExecuteGrapple), grappleDelayTime);
+
+            source.PlayOneShot(hookSound);
+
+            yeet = true;
         }
         else
         {
             grapplePoint = cam.position + cam.forward * maxGrappleDistance;
 
             Invoke(nameof(StopGrapple), grappleDelayTime);
+
+            yeet = false;
         }
 
         Hooklr.enabled = true;
         Hooklr.SetPosition(1, grapplePoint);
+
+
     }
 
     private void ExecuteGrapple()
@@ -125,5 +138,6 @@ public class HookGrapple : MonoBehaviour
         Hooklr.enabled = false;
 
         pm.readyToSlide = true;
+
     }
 }
